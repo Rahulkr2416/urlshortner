@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python URL Shortener</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Custom styles */
+        .gradient-text {
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        
+        .url-history-item:hover {
+            background-color: rgba(59, 130, 246, 0.1);
+            transform: translateX(5px);
+            transition: all 0.2s ease;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .animate-slide-in {
+            animation: slideIn 0.3s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col">
+    <div class="container mx-auto px-4 py-12 flex-grow">
+        <header class="text-center mb-12">
+            <h1 class="text-4xl md:text-5xl font-bold mb-4 gradient-text">Python URL Shortener</h1>
+            <p class="text-gray-600 max-w-2xl mx-auto">Powered by Flask and SQLite</p>
+        </header>
+        
+        <main class="max-w-3xl mx-auto">
+            <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+                <div class="flex items-center">
+                    <div class="flex-grow relative">
+                        <input 
+                            type="url" 
+                            id="url-input" 
+                            placeholder="Paste your long URL here..."
+                            class="w-full p-4 pr-12 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition duration-200"
+                            required
+                        >
+                        <i class="fas fa-link absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                    </div>
+                    <button 
+                        id="shorten-btn" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-4 rounded-lg whitespace-nowrap transition duration-200 hover:shadow-md flex items-center justify-center"
+                    >
+                        <i class="fas fa-magic mr-2"></i> Shorten
+                    </button>
+                </div>
+                
+                <div id="custom-alias" class="mt-4 hidden">
+                    <label for="alias-input" class="block text-sm font-medium text-gray-700 mb-1">Custom alias (optional)</label>
+                    <div class="flex">
+                        <span class="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500">
+                            ${window.location.hostname}/
+                        </span>
+                        <input 
+                            type="text" 
+                            id="alias-input" 
+                            placeholder="mylink"
+                            class="flex-1 min-w-0 block w-full px-3 py-2 rounded-none rounded-r-md border border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                            pattern="[A-Za-z0-9_-]+"
+                            title="Only letters, numbers, hyphens and underscores allowed"
+                        >
+                    </div>
+                </div>
+            </div>
+            
+            <div id="result-container" class="hidden bg-white rounded-xl shadow-lg overflow-hidden mb-8 animate-slide-in">
+                <div class="p-6 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900 flex items-center">
+                        <i class="fas fa-check-circle text-green-500 mr-2"></i>
+                        Your shortened URL is ready!
+                    </h3>
+                </div>
+                <div class="p-6">
+                    <div class="flex items-center mb-4">
+                        <input 
+                            type="text" 
+                            id="short-url" 
+                            readonly 
+                            class="flex-grow p-3 border-2 border-gray-200 rounded-l-lg focus:outline-none bg-gray-50"
+                        >
+                        <button 
+                            id="copy-btn" 
+                            class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-3 rounded-r-lg transition duration-200"
+                        >
+                            <i class="fas fa-copy mr-2"></i> Copy
+                        </button>
+                    </div>
+                    <div class="flex items-center justify-between text-sm text-gray-600">
+                        <div>
+                            <span id="original-url" class="block truncate"></span>
+                            <span id="click-count">0 clicks</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="history-section" class="hidden">
+                <div class="flex items-center justify-between mb-4 border-b pb-2 border-gray-200">
+                    <h2 class="text-xl font-semibold text-gray-800 flex items-center">
+                        <i class="fas fa-history mr-2"></i> History
+                    </h2>
+                </div>
+                <div id="history-list" class="space-y-3">
+                    <!-- History items will be added here dynamically -->
+                </div>
+            </div>
+        </main>
+    </div>
+    
+   
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlInput = document.getElementById('url-input');
+            const shortenBtn = document.getElementById('shorten-btn');
+            const resultContainer = document.getElementById('result-container');
+            const shortUrl = document.getElementById('short-url');
+            const copyBtn = document.getElementById('copy-btn');
+            const originalUrl = document.getElementById('original-url');
+            const historySection = document.getElementById('history-section');
+            const historyList = document.getElementById('history-list');
+            const aliasContainer = document.getElementById('custom-alias');
+            const aliasInput = document.getElementById('alias-input');
+            const clickCount = document.getElementById('click-count');
+            
+            // Toggle custom alias option when clicking URL field
+            urlInput.addEventListener('focus', function() {
+                aliasContainer.classList.remove('hidden');
+            });
+            
+            // Shorten button click handler
+            shortenBtn.addEventListener('click', shortenUrl);
+            
+            // Allow pressing Enter to shorten
+            urlInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    shortenUrl();
+                }
+            });
+            
+            // Copy button click handler
+            copyBtn.addEventListener('click', function() {
+                shortUrl.select();
+                document.execCommand('copy');
+                
+                // Change button text temporarily
+                const originalText = copyBtn.innerHTML;
+                copyBtn.innerHTML = '<i class="fas fa-check mr-2"></i> Copied!';
+                copyBtn.classList.add('bg-green-600');
+                copyBtn.classList.remove('bg-blue-600');
+                
+                setTimeout(function() {
+                    copyBtn.innerHTML = originalText;
+                    copyBtn.classList.remove('bg-green-600');
+                    copyBtn.classList.add('bg-blue-600');
+                }, 2000);
+            });
+            
+            // Load history on page load
+            loadHistory();
+            
+            // Function to shorten URL
+            async function shortenUrl() {
+                const longUrl = urlInput.value.trim();
+                const customAlias = aliasInput.value.trim();
+                
+                if (!longUrl) {
+                    showError('Please enter a URL');
+                    return;
+                }
+                
+                try {
+                    const response = await fetch('/shorten', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            url: longUrl,
+                            alias: customAlias || null
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        // Show result
+                        shortUrl.value = data.short_url;
+                        originalUrl.textContent = data.original_url;
+                        resultContainer.classList.remove('hidden');
+                        
+                        // Reset form
+                        aliasInput.value = '';
+                        urlInput.value = '';
+                        
+                        // Refresh history
+                        loadHistory();
+                    } else {
+                        showError(data.error || 'Error shortening URL');
+                    }
+                } catch (error) {
+                    showError('Network error. Please try again.');
+                }
+            }
+            
+            // Load history from backend
+            async function loadHistory() {
+                try {
+                    const response = await fetch('/history');
+                    const data = await response.json();
+                    
+                    if (response.ok && data.length > 0) {
+                        historySection.classList.remove('hidden');
+                        renderHistory(data);
+                    } else {
+                        historySection.classList.add('hidden');
+                    }
+                } catch (error) {
+                    console.error('Error loading history:', error);
+                }
+            }
+            
+            // Render history list
+            function renderHistory(history) {
+                historyList.innerHTML = '';
+                
+                history.forEach(entry => {
+                    const date = new Date(entry.created_at);
+                    const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    
+                    const historyItem = document.createElement('div');
+                    historyItem.className = 'url-history-item bg-gray-50 p-4 rounded-lg cursor-pointer transition duration-200';
+                    historyItem.innerHTML = `
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1 min-w-0 mr-4">
+                                <p class="text-gray-500 text-sm mb-1">${dateStr}</p>
+                                <a href="${entry.original_url}" target="_blank" class="text-gray-900 font-medium hover:text-blue-600 block truncate">${entry.original_url}</a>
+                                <div class="mt-1 flex items-center">
+                                    <a href="${entry.short_url}" target="_blank" class="text-blue-600 hover:text-blue-800 font-medium">${entry.short_url}</a>
+                                    <span class="mx-2 text-gray-400">•</span>
+                                    <span class="text-gray-500 text-sm">${entry.clicks} clicks</span>
+                                </div>
+                            </div>
+                            <button class="history-copy text-blue-600 hover:text-blue-800 ml-2 p-2 rounded-full hover:bg-blue-50" data-url="${entry.short_url}">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                    `;
+                    
+                    historyList.appendChild(historyItem);
+                });
+                
+                // Add event listeners to history copy buttons
+                document.querySelectorAll('.history-copy').forEach(button => {
+                    button.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        const urlToCopy = this.getAttribute('data-url');
+                        
+                        navigator.clipboard.writeText(urlToCopy).then(() => {
+                            const icon = this.querySelector('i');
+                            const originalClass = icon.className;
+                            
+                            icon.className = 'fas fa-check';
+                            this.classList.add('text-green-600');
+                            this.classList.remove('text-blue-600');
+                            
+                            setTimeout(() => {
+                                icon.className = originalClass;
+                                this.classList.remove('text-green-600');
+                                this.classList.add('text-blue-600');
+                            }, 2000);
+                        });
+                    });
+                });
+            }
+            
+            // Show error message
+            function showError(message) {
+                const errorEl = document.createElement('div');
+                errorEl.className = 'mt-2 text-red-600 text-sm flex items-center';
+                errorEl.innerHTML = `<i class="fas fa-exclamation-circle mr-1"></i> ${message}`;
+                
+                const existingError = urlInput.nextElementSibling;
+                if (existingError && existingError.classList.contains('text-red-600')) {
+                    urlInput.parentNode.removeChild(existingError);
+                }
+                
+                urlInput.parentNode.insertBefore(errorEl, aliasContainer);
+                
+                // Remove error after 5 seconds
+                setTimeout(() => {
+                    if (errorEl.parentNode) {
+                        errorEl.parentNode.removeChild(errorEl);
+                    }
+                }, 5000);
+            }
+        });
+    </script>
+</body>
+</html>
